@@ -10,55 +10,22 @@ class Grab_cut(object):
         self.height = None
         self.width = None
 
-    def image_matting(self, image_file, shape, iteration=10, flag=True):
-        if flag:
-            points = shape['points']
-            xmin, ymin, xmax, ymax = Grab_cut.convertPoints2BndBox(points)
-            self.width = xmax - xmin
-            self.height = ymax - ymin
+    def image_matting(self, image_file, shape, iteration=10):
+        points = shape['points']
+        xmin, ymin, xmax, ymax = Grab_cut.convertPoints2BndBox(points)
+        self.width = xmax - xmin
+        self.height = ymax - ymin
 
-            src_img = cv2.imread(image_file)
+        src_img = cv2.imread(image_file)
 
-            mask = np.zeros(src_img.shape[:2], np.uint8)
-            print(mask)
-            print(src_img)
-            bgdModel = np.zeros((1, 65), np.float64)
-            fgdModel = np.zeros((1, 65), np.float64)
-            rect = (xmin, ymin, self.width, self.height)
+        mask = np.zeros(src_img.shape[:2], np.uint8)
+        bgdModel = np.zeros((1, 65), np.float64)
+        fgdModel = np.zeros((1, 65), np.float64)
+        rect = (xmin, ymin, self.width, self.height)
 
-            # Grabcut
-            cv2.grabCut(src_img, mask, rect, bgdModel, fgdModel,
-                        iteration, cv2.GC_INIT_WITH_RECT)
-        else:
-            bgds = shape['bgds']
-            fgds = shape['fgds']
-            src_img = cv2.imread(image_file)
-            xmin, ymin, xmax, ymax = 0, 0, src_img.shape[:2][1], src_img.shape[:2][0]
-
-            mask = np.full(src_img.shape[:2],cv2.GC_PR_FGD,np.uint8)
-            for data in bgds:
-                x = int(data[0])
-                y = int(data[1])
-                if x == src_img.shape[:2][1]:
-                    x -= 1
-                if y == src_img.shape[:2][0]:
-                    y -= 1
-                mask[y][x] = cv2.GC_BGD
-            for data in fgds:
-                x = int(data[0])
-                y = int(data[1])
-                if x == src_img.shape[:2][1]:
-                    x -= 1
-                if y == src_img.shape[:2][0]:
-                    y -= 1
-                mask[y][x] = cv2.GC_FGD
-
-            bgdModel = np.zeros((1,65),np.float64)
-            fgdModel = np.zeros((1,65),np.float64)
-            rect = (0, int(src_img.shape[:2][0]/2), src_img.shape[:2][1], src_img.shape[:2][0])
-
-            cv2.grabCut(src_img, mask, rect, bgdModel, fgdModel, iteration, cv2.GC_INIT_WITH_MASK)
-
+        # Grabcut
+        cv2.grabCut(src_img, mask, rect, bgdModel, fgdModel,
+                    iteration, cv2.GC_INIT_WITH_RECT)
 
         r_channel, g_channel, b_channel = cv2.split(src_img)
         a_channel = np.where((mask == 2) | (mask == 0), 0, 255).astype('uint8')

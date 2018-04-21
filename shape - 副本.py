@@ -31,11 +31,9 @@ class Shape(object):
     point_size = 8
     scale = 1.0
 
-    def __init__(self, label=None, line_color=None,difficult = False,edit = True):
+    def __init__(self, label=None, line_color=None,difficult = False):
         self.label = label
         self.points = []
-        self.bgds = []
-        self.fgds = []
         self.fill = False
         self.selected = False
         self.difficult = difficult
@@ -48,7 +46,6 @@ class Shape(object):
         }
 
         self._closed = False
-        self.edit = edit
 
         if line_color is not None:
             # Override the class line_color attribute
@@ -65,7 +62,7 @@ class Shape(object):
         return False
 
     def addPoint(self, point):
-        if not self.reachMaxPoints() or not self.edit:
+        if not self.reachMaxPoints():
             self.points.append(point)
 
     def popPoint(self):
@@ -80,7 +77,7 @@ class Shape(object):
         self._closed = False
 
     def paint(self, painter):
-        if self.points and self.edit:
+        if self.points:
             color = self.select_line_color if self.selected else self.line_color
             pen = QPen(color)
             # Try using integer sizes for smoother drawing(?)
@@ -108,21 +105,6 @@ class Shape(object):
             if self.fill:
                 color = self.select_fill_color if self.selected else self.fill_color
                 painter.fillPath(line_path, color)
-        elif self.bgds or self.fgds:
-            pen = QPen(Qt.red, 2, Qt.SolidLine)
-            painter.setPen(pen)
-            for pointArr in self.bgds:
-                n = len(pointArr)
-                for i in range(n):
-                    if i < (n-1):
-                        painter.drawLine(pointArr[i].x(), pointArr[i].y(), pointArr[i+1].x(), pointArr[i+1].y())
-            pen = QPen(Qt.blue, 2, Qt.SolidLine)
-            painter.setPen(pen)
-            for pointArr in self.fgds:
-                n = len(pointArr)
-                for i in range(n):
-                    if i < (n-1):
-                        painter.drawLine(pointArr[i].x(), pointArr[i].y(), pointArr[i+1].x(), pointArr[i+1].y())
 
     def drawVertex(self, path, i): #顶点
         d = self.point_size / self.scale

@@ -12,6 +12,7 @@ from canvas import Canvas
 from lib import newIcon
 from zoomWidget import ZoomWidget
 from grab_cut import Grab_cut
+from SLICcv import SLIC
 import cv2
 
 __appname__ = 'ImageMatting'
@@ -38,7 +39,7 @@ class WindowMixin(object):
 
 class ResizedQWidget(QWidget):
     def sizeHint(self):
-        return QSize(100, 150)
+        return QSize(697, 800)
 
 
 def newAction(parent, text, slot=None, shortcut=None,
@@ -96,11 +97,14 @@ class MainWindow(QMainWindow, WindowMixin):
         listLayout = QVBoxLayout()
         listLayout.setContentsMargins(0, 0, 0, 0)
         matResultShow = ResizedQWidget()
-        matResultShow.resize(150, 150)
+        matResultShow.resize(697, 800)
 
         self.pic = QLabel(matResultShow)
-        self.pic.resize(150, 150)
-        self.pic.setGeometry(50, 20, 150, 150)
+        self.pic.resize(697, 800)
+        self.pic.setGeometry(0, 0, 697, 800)
+
+        self.edit = True
+        self.bgd = True
 
         # self.pic.resize(matResultShow.width(), matResultShow.height())
         # self.pic.setScaledContents(True)
@@ -110,7 +114,7 @@ class MainWindow(QMainWindow, WindowMixin):
         # self.resultdock.adjustSize()
         self.resultdock.setObjectName('result')
         self.resultdock.setWidget(matResultShow)
-        self.resultdock.resize(150, 150)
+        self.resultdock.resize(697, 800)
 
         self.fileListWidget = QListWidget()
         self.fileListWidget.itemDoubleClicked.connect(
@@ -126,7 +130,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.zoomWidget = ZoomWidget()
 
-        self.canvas = Canvas(parent=self)
+        self.canvas = Canvas()
         scroll = QScrollArea()
         scroll.setWidget(self.canvas)
         scroll.setWidgetResizable(True)
@@ -140,12 +144,13 @@ class MainWindow(QMainWindow, WindowMixin):
         self.setCentralWidget(scroll)
         self.addDockWidget(Qt.RightDockWidgetArea, self.resultdock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.filedock)
+        
         self.filedock.setFeatures(QDockWidget.DockWidgetFloatable)
 
         self.dockFeatures = QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetFloatable
         self.resultdock.setFeatures(
             self.resultdock.features() ^ self.dockFeatures)
-
+        
         # Actions
         action = partial(newAction, self)
 
@@ -158,10 +163,9 @@ class MainWindow(QMainWindow, WindowMixin):
         # open_pre_img = action('&Previous Image', self.openPreImg,
         #                        'Ctrl+M', 'Open previous image')
         save = action('&Save', self.saveFile, 'Crl+S', 'Save output image')
-        create = action('Create\nRectBox', self.createShape,
-                        'w', 'Draw a new Box')
-        matting = action('&Create\nMatting', self.grabcutMatting,
-                         'e', 'GrabcutMatting')
+        create = action('Edit', self.createShape, 'w', 'Start to edit')
+        matting = action('&GrabCut\nMatting', self.grabcutMatting, 'e', 'GrabcutMatting')
+        slic = action('&SLIC\nMatting', self.slicMatting, 'e', 'SlicMatting')
 
         self.scalers = {
             self.FIT_WINDOW: self.scaleFitWindow,
@@ -174,7 +178,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions = struct(save=save, open_file=open_file,
                               open_dir=open_dir, change_save_dir=change_save_dir,
                               # open_next_img=open_next_img, open_pre_img=open_pre_img,
-                              create=create, matting=matting)
+                              create=create, matting=matting, slic=slic)
 
         # Auto saving: enable auto saving if pressing next
         # self.autoSaving = QAction('Auto Saving', self)
@@ -183,14 +187,71 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # set toolbar
         self.tools = self.toolbar('Tools')
+
+        qw = QWidget()
+        grid = QGridLayout()
+
+        nr_superpixels = QLabel(u'K')
+        grid.addWidget(nr_superpixels,1,0)
+
+        self.nr_superpixelsEdit  = QLineEdit()
+        self.nr_superpixelsEdit.setText('200')
+        grid.addWidget(self.nr_superpixelsEdit,1,1)
+
+        nc = QLabel(u'm')
+        grid.addWidget(nc,2,0)
+
+        self.ncEdit = QLineEdit()
+        self.ncEdit.setText('20')
+        grid.addWidget(self.ncEdit,2,1)
+
+        self.cr = QCheckBox('Create RectBox', self)
+        self.cr.setFocusPolicy(Qt.NoFocus)
+        self.cr.move(10, 10)
+        self.cr.toggle()
+        self.cr.stateChanged.connect(lambda:self.btnstate(self.cr))
+        grid.addWidget(self.cr,3,1)
+
+        self.dg = QCheckBox('Draw GC_BGD', self)
+        self.dg.setFocusPolicy(Qt.NoFocus)
+        self.dg.move(10, 10)
+        self.dg.toggle()
+        self.dg.stateChanged.connect(lambda:self.btnstate(self.dg))
+        grid.addWidget(self.dg,4,1)
+
+        qw.setLayout(grid)
+
+        self.tools.addWidget(qw)
+
         self.actions.all = (save, open_file, open_dir,
                             change_save_dir, create,
                             # open_pre_img, open_next_img, 
-                            matting)
+                            matting, slic)
         addActions(self.tools, self.actions.all)
 
         # set status
         self.statusBar().showMessage('{} started.'.format(__appname__))
+
+        self.showMaximized()
+    def btnstate(self,b):
+        if b.text() == "Create RectBox":
+            if b.isChecked() == True:
+                self.edit = True
+                self.canvas.edit = True
+            else:
+                self.edit = False
+                self.canvas.edit = False
+        elif b.text() == "Draw GC_BGD":
+            if b.isChecked() == True:
+                self.bgd = True
+                self.canvas.bgd = True
+                self.canvas.current.fgds = self.canvas.current.points
+                self.canvas.current.points = [1]
+            else:
+                self.bgd = False
+                self.canvas.bgd = False
+                self.canvas.current.bgds = self.canvas.current.points
+                self.canvas.current.points = [1]
 
     def okToContinue(self):
         if self.dirty:
@@ -277,6 +338,8 @@ class MainWindow(QMainWindow, WindowMixin):
         if filePath and os.path.exists(filePath):
             # load image
             self.imageData = read(filePath, None)
+        else:
+            self.imageData = None;
 
         image = QImage.fromData(self.imageData)
         if image.isNull():
@@ -334,20 +397,57 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.editMode.setEnabled(not edit)
 
     def grabcutMatting(self):
-
+        self.flag = 1
         if self.mattingFile is None:
             self.mattingFile = Grab_cut()
 
         def format_shape(s):
-            return dict(line_color=s.line_color.getRgb(),
+            if self.edit:
+                return dict(line_color=s.line_color.getRgb(),
                         fill_color=s.fill_color.getRgb(),
                         points=[(p.x(), p.y()) for p in s.points])
+            else:
+                bgds = []
+                for q in s.bgds:
+                    for p in q:
+                        bgds.append([p.x(), p.y()])
+                fgds = []
+                for q in s.fgds:
+                    for p in q:
+                        fgds.append([p.x(), p.y()])
+                return dict(line_color=s.line_color.getRgb(),
+                        fill_color=s.fill_color.getRgb(),
+                        bgds=bgds,fgds=fgds)
 
         shape = format_shape(self.canvas.shapes[-1])
-        self.image_out_np = self.mattingFile.image_matting(self.filePath,
+        if self.edit:
+            self.image_out_np = self.mattingFile.image_matting(self.filePath,
                                                            shape, iteration=10)
+        else:
+            self.image_out_np = self.mattingFile.image_matting(self.filePath,
+                                                           shape, iteration=10, flag=False)
         self.showResultImg(self.image_out_np)
         self.actions.save.setEnabled(True)
+        self.actions.create.setEnabled(True)
+
+    def slicMatting(self):
+        self.flag = 2
+        img = cv2.imread(self.filePath)
+        nr_superpixels = int(self.nr_superpixelsEdit.text())
+        nc = int(self.ncEdit.text())
+        step = int((img.shape[0]*img.shape[1]/nr_superpixels)**0.5)#assume the area is regular
+        slic = SLIC(img, step, nc)
+        slic.generateSuperPixels()
+        slic.createConnectivity()
+        slic.displayContours([255,255,255])
+        self.image_out_np = slic.img
+        image_np = slic.img
+        image = QImage(image_np, image_np.shape[1],
+                       image_np.shape[0], QImage.Format_RGB888).rgbSwapped()
+        matImg = QPixmap(image).scaled(self.pic.width(),self.pic.height())
+        self.pic.setPixmap(matImg)
+        self.actions.save.setEnabled(True)
+        self.actions.create.setEnabled(True)
 
     def showResultImg(self, image_np):
         # resize to pic
