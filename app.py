@@ -105,6 +105,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.edit = True
         self.bgd = True
+        self.slic = None
 
         # self.pic.resize(matResultShow.width(), matResultShow.height())
         # self.pic.setScaledContents(True)
@@ -163,9 +164,14 @@ class MainWindow(QMainWindow, WindowMixin):
         # open_pre_img = action('&Previous Image', self.openPreImg,
         #                        'Ctrl+M', 'Open previous image')
         save = action('&Save', self.saveFile, 'Crl+S', 'Save output image')
-        create = action('Edit', self.createShape, 'w', 'Start to edit')
-        matting = action('&GrabCut\nMatting', self.grabcutMatting, 'e', 'GrabcutMatting')
-        slic = action('&SLIC\nMatting', self.slicMatting, 'e', 'SlicMatting')
+        create = action('&Edit', self.createShape, 'w', 'Start to edit')
+        matting = action('&GrabCut Matting', self.grabcutMatting, 'e', 'GrabcutMatting')
+        slic = action('&SLIC Matting', self.slicMatting, 's', 'SlicMatting')
+        slic_start = action('&Start SLIC Matting', self.startSlicMatting, 'm', 'startsSlicMatting')
+        slic_start = action('&Start SLIC Matting', self.startSlicMatting, 'm', 'startsSlicMatting')
+        withdraw = action('&withdraw', self.withdraw, 'm', 'withdraw')
+        repaint = action('&repaint', self.repaint, 'm', 'repaint')
+
 
         self.scalers = {
             self.FIT_WINDOW: self.scaleFitWindow,
@@ -178,7 +184,9 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions = struct(save=save, open_file=open_file,
                               open_dir=open_dir, change_save_dir=change_save_dir,
                               # open_next_img=open_next_img, open_pre_img=open_pre_img,
-                              create=create, matting=matting, slic=slic)
+                              create=create, matting=matting, 
+                              slic=slic, slic_start=slic_start,
+                              withdraw=withdraw, repaint=repaint)
 
         # Auto saving: enable auto saving if pressing next
         # self.autoSaving = QAction('Auto Saving', self)
@@ -195,14 +203,14 @@ class MainWindow(QMainWindow, WindowMixin):
         grid.addWidget(nr_superpixels,1,0)
 
         self.nr_superpixelsEdit  = QLineEdit()
-        self.nr_superpixelsEdit.setText('200')
+        self.nr_superpixelsEdit.setText('400')
         grid.addWidget(self.nr_superpixelsEdit,1,1)
 
         nc = QLabel(u'm')
         grid.addWidget(nc,2,0)
 
         self.ncEdit = QLineEdit()
-        self.ncEdit.setText('20')
+        self.ncEdit.setText('30')
         grid.addWidget(self.ncEdit,2,1)
 
         self.cr = QCheckBox('Create RectBox', self)
@@ -226,13 +234,27 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.all = (save, open_file, open_dir,
                             change_save_dir, create,
                             # open_pre_img, open_next_img, 
-                            matting, slic)
+                            matting, slic, slic_start, withdraw, repaint)
         addActions(self.tools, self.actions.all)
 
         # set status
         self.statusBar().showMessage('{} started.'.format(__appname__))
 
         self.showMaximized()
+
+    def withdraw(self):
+        self.canvas.points = []
+        if self.canvas.current.points:
+            self.canvas.current.points.pop()
+        self.canvas.update()
+
+    def repaint(self):
+        self.canvas.points = []
+        self.canvas.current.points = []
+        self.canvas.current.bgds = []
+        self.canvas.current.fgds = []
+        self.canvas.update()
+
     def btnstate(self,b):
         if b.text() == "Create RectBox":
             if b.isChecked() == True:
@@ -426,26 +448,70 @@ class MainWindow(QMainWindow, WindowMixin):
         else:
             self.image_out_np = self.mattingFile.image_matting(self.filePath,
                                                            shape, iteration=10, flag=False)
+        self.canvas.grab_cut = self.mattingFile
+        self.canvas.slic = None
         self.showResultImg(self.image_out_np)
         self.actions.save.setEnabled(True)
         self.actions.create.setEnabled(True)
 
     def slicMatting(self):
         self.flag = 2
+
+        #shape = format_shape(self.canvas.shapes[-1])
         img = cv2.imread(self.filePath)
         nr_superpixels = int(self.nr_superpixelsEdit.text())
         nc = int(self.ncEdit.text())
         step = int((img.shape[0]*img.shape[1]/nr_superpixels)**0.5)#assume the area is regular
-        slic = SLIC(img, step, nc)
-        slic.generateSuperPixels()
-        slic.createConnectivity()
-        slic.displayContours([255,255,255])
-        self.image_out_np = slic.img
-        image_np = slic.img
+        self.slic = SLIC(img, step, nc, self.filePath)
+        self.slic.generateSuperPixels()
+        self.slic.createConnectivity()
+        self.slic.displayContours([255,255,255])
+        self.image_out_np = self.slic.img
+        image_np = self.slic.img
         image = QImage(image_np, image_np.shape[1],
                        image_np.shape[0], QImage.Format_RGB888).rgbSwapped()
+        #matImg = QPixmap(image).scaled(self.pic.width(),self.pic.height())
+        #self.pic.setPixmap(matImg)
+        matImg = QPixmap(image)
+        self.canvas.loadPixmap(matImg)
+        self.canvas.slic = self.slic
+        self.canvas.grab_cut = None
+        self.actions.save.setEnabled(True)
+        self.actions.create.setEnabled(True)
+    def startSlicMatting(self):
+        self.flag = 2
+
+        def format_shape(s):
+            if self.edit:
+                return dict(line_color=s.line_color.getRgb(),
+                        fill_color=s.fill_color.getRgb(),
+                        points=[(p.x(), p.y()) for p in s.points])
+            else:
+                bgds = []
+                for q in s.bgds:
+                    for p in q:
+                        bgds.append([p.x(), p.y()])
+                fgds = []
+                for q in s.fgds:
+                    for p in q:
+                        fgds.append([p.x(), p.y()])
+                return dict(line_color=s.line_color.getRgb(),
+                        fill_color=s.fill_color.getRgb(),
+                        bgds=bgds,fgds=fgds)
+
+        shape = format_shape(self.canvas.shapes[-1])
+        self.slic.imageCutting(shape)
+
+        self.image_out_np = self.slic.img
+        image_np = self.slic.img
+        image = QImage(image_np, image_np.shape[1],image_np.shape[0], QImage.Format_ARGB32).rgbSwapped()
         matImg = QPixmap(image).scaled(self.pic.width(),self.pic.height())
         self.pic.setPixmap(matImg)
+        # matImg = QPixmap(image)
+        # self.canvas.loadPixmap(matImg)
+        #self.showResultImg(self.image_out_np)
+        self.canvas.slic = self.slic
+        self.canvas.grab_cut = None
         self.actions.save.setEnabled(True)
         self.actions.create.setEnabled(True)
 

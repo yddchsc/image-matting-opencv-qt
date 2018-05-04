@@ -2,12 +2,14 @@
 
 import numpy as np
 import sys
-import  cv2
+import cv2
+from graph import Graph
 
 class SLIC:
     #step表示每个聚类块步长，nc表示颜色距离权重参数，ns表示空间距离权重参数
-    def __init__(self, img, step, nc):
+    def __init__(self, img, step, nc, filepath):
         self.img = img
+        self.filepath = filepath
         self.height, self.width = img.shape[:2]#get the h and w of image
         self._convertToLAB()
         self.step = step
@@ -15,6 +17,10 @@ class SLIC:
         self.ns = step #用步长来做空间权重
         self.FLT_MAX = 1000000
         self.ITERATIONS = 10
+        self.bgdArea = []
+        self.fgdArea = []
+        self.middleArea = []
+        self.graph = Graph()
 
     def _convertToLAB(self):
         try:
@@ -126,8 +132,8 @@ class SLIC:
             #slic.displayContours([255, 255, 255])  # 分割线使用白色线分割
             #cv2.imshow("superpixels", slic.img)
             #cv2.waitKey(10)
-            print('Iteration=%d'%(i+1))
-        print("done....")
+            #print('Iteration=%d'%(i+1))
+        #print("done....")
         #cv2.waitKey(0)
         #cv2.imwrite("SLICimg.jpg",self.img)
 
@@ -200,6 +206,44 @@ class SLIC:
                     x = i + dx
                     y = j + dy
                     if x>=0 and x < self.width and y>=0 and y < self.height:
+                        if isTaken[y, x] == False and self.clusters[j, i] != self.clusters[y, x] and not ((self.clusters[j, i] in self.bgdArea and self.clusters[y, x] in self.bgdArea) or (self.clusters[j, i] in self.fgdArea and self.clusters[y, x] in self.fgdArea) or (self.clusters[j, i] in self.middleArea and self.clusters[y, x] in self.middleArea)):#计算8邻域内有多少个不同点
+                            if self.clusters[j, i] in self.graph.node_neighbors:
+                                if not self.clusters[y, x] in self.graph.node_neighbors[self.clusters[j, i]]:
+                                    self.graph.node_neighbors[self.clusters[j, i]].append(self.clusters[y, x])
+                                    self.graph.add_edge((self.clusters[j, i],self.clusters[y, x]))
+                            else:
+                                self.graph.node_neighbors[self.clusters[j, i]] = [self.clusters[y, x]]
+                                self.graph.add_edge((self.clusters[j, i],self.clusters[y, x]))
+                            if self.clusters[y, x] in self.graph.node_neighbors:
+                                if not self.clusters[j, i] in self.graph.node_neighbors[self.clusters[y, x]]:
+                                    self.graph.node_neighbors[self.clusters[y, x]].append(self.clusters[j, i])
+                                    self.graph.add_edge((self.clusters[j, i],self.clusters[y, x]))
+                            else:
+                                self.graph.node_neighbors[self.clusters[y, x]] = [self.clusters[j, i]]
+                                self.graph.add_edge((self.clusters[j, i],self.clusters[y, x]))
+                            nr_p += 1
+
+                if nr_p >= 2:#至少有两个不同就可以确定该点为轮廓线
+                    isTaken[j, i] = True#已被作为轮廓
+                    contours.append([j, i])
+
+        for i in range(len(contours)):
+            self.img[contours[i][0], contours[i][1]] = color#为轮廓线画上颜色
+
+    def showResults(self, color):
+        dx8 = [-1, -1, 0, 1, 1, 1, 0, -1]#8方向的近邻
+        dy8 = [0, -1, -1, -1, 0, 1, 1, 1]
+
+        isTaken = np.zeros(self.img.shape[:2], np.bool)#创建一副轮廓线标志位，标志每一个像素是否作为轮廓线
+        contours = []
+
+        for i in range(self.width):
+            for j in range(self.height):
+                nr_p = 0
+                for dx, dy in zip(dx8, dy8):
+                    x = i + dx
+                    y = j + dy
+                    if x>=0 and x < self.width and y>=0 and y < self.height:
                         if isTaken[y, x] == False and self.clusters[j, i] != self.clusters[y, x]:#计算8邻域内有多少个不同点
                             nr_p += 1
 
@@ -225,6 +269,115 @@ class SLIC:
                     min_grad = abs(c1[0] - c3[0]) + abs(c2[0] - c3[0])
                     loc_min = [i, j]
         return loc_min
+
+    def createHist(self,b_plane,g_plane,r_plane): 
+        #cv2.CvtColor(img,img,cv2.CV_BGR2HSV) 
+        planes = [b_plane, g_plane, r_plane]
+         
+        bins = 4
+        b_bins = bins
+        g_bins = bins
+        r_bins = bins
+
+        hist_size = [b_bins,g_bins,r_bins]
+        b_range = [0,255]
+        g_range = [0,255]
+        r_range = [0,255]
+     
+        #ranges = [b_range,g_range,r_range]
+        ranges = [0,255,0,255,0,255]
+        #hist = cv2.createHist(hist_size, cv2.CV_HIST_ARRAY, ranges, 1)
+        #hist = cv2.calcHist([cv2.getImage(i) for i in planes], hist_size, cv2.CV_HIST_ARRAY, ranges, 1)
+        hist = cv2.calcHist(
+            [cv2.merge([b_plane, g_plane, r_plane]).astype('float32')], 
+            channels = [0,1,2], #使用的通道  
+            mask = None, #没有使用mask 
+            histSize = hist_size, 
+            ranges = ranges
+        )
+        #cv2.NormalizeHist(hist,1)
+        return hist
+
+    def imageCutting(self,shape):
+        bgds = shape['bgds']
+        fgds = shape['fgds']
+        centers = self.centers
+        self.bgdArea = []
+        self.fgdArea = []
+        self.middleArea = []
+        hists = {}
+        for data in bgds:
+            x = int(data[0])
+            y = int(data[1])
+            if x == self.img.shape[:2][1]:
+                x -= 1
+            if y == self.img.shape[:2][0]:
+                y -= 1
+            self.bgdArea.append(self.clusters[y][x])
+        self.bgdArea = list(set(self.bgdArea)) #去重复
+        for data in fgds:
+            x = int(data[0])
+            y = int(data[1])
+            if x == self.img.shape[:2][1]:
+                x -= 1
+            if y == self.img.shape[:2][0]:
+                y -= 1
+            self.fgdArea.append(self.clusters[y][x])
+        self.fgdArea = list(set(self.fgdArea))
+
+        copyImg = cv2.imread(self.filepath)
+        b_plane, g_plane, r_plane = cv2.split(copyImg)
+        for k in self.graph.nodes():
+            idx = (self.clusters == k)
+            hist = self.createHist(b_plane[idx], g_plane[idx], r_plane[idx])
+            if (k in self.bgdArea) or (k in self.fgdArea):
+                hists[k] = hist
+            else:
+                hists[k] = hist
+                self.middleArea.append(k)
+
+        self.graph.bgdArea = self.bgdArea
+        self.graph.fgdArea = self.fgdArea
+        self.graph.middleArea = self.middleArea
+
+        while len(self.graph.middleArea)>0:
+            n = len(self.graph.middleArea)
+            self.graph.breadth_first_search(root=self.graph.bgdArea[-1], hists=hists)
+            #print(self.graph.middleArea)
+            self.graph.visited = {}
+            self.graph.breadth_first_search(root=self.graph.fgdArea[-1], hists=hists)
+            self.graph.visited = {}
+            #print(self.graph.middleArea)
+            if len(self.graph.middleArea) == n:
+                for middle in self.graph.middleArea:
+                    maxs = -100000
+                    maxindex = self.graph.node_neighbors[middle][0]
+                    for neighbour in self.graph.node_neighbors[middle]:
+                        if not neighbour in self.graph.middleArea and cv2.compareHist(hists[middle],hists[neighbour],0)>maxs:
+                            maxs = cv2.compareHist(hists[middle],hists[neighbour],0)
+                            maxindex = neighbour
+                    if maxindex in self.graph.fgdArea:    
+                        self.middleArea.remove(middle)
+                        self.fgdArea.append(middle)
+                    elif maxindex in self.graph.bgdArea:
+                        self.middleArea.remove(middle)
+                        self.bgdArea.append(middle)
+
+        self.bgdArea = self.graph.bgdArea
+        self.fgdArea = self.graph.fgdArea
+        self.middleArea = self.graph.middleArea
+
+        a_plane = 255 * np.ones(self.img.shape[:2]).astype('uint8')
+        for k in self.graph.nodes():
+            idx = (self.clusters == k)
+            if k in self.bgdArea:
+                a_plane[idx] = 0
+        self.img = cv2.merge((r_plane,
+                              g_plane,
+                              b_plane,
+                              a_plane))
+
+
 #通过后台执行的传入参数
 #img = cv2.imread(sys.argv[1])
 #nr_superpixels = int(sys.argv[2])

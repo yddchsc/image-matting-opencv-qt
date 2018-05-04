@@ -56,6 +56,8 @@ class Canvas(QWidget):
         self.verified = False
         self.edit = True
         self.bgd = True
+        self.slic = None
+        self.grab_cut = None
 
     def setDrawingColor(self, qColor):
         self.drawingLineColor = qColor
@@ -449,7 +451,21 @@ class Canvas(QWidget):
         self.prevPoint = point
         if not self.boundedMoveShape(shape, point - offset):
             self.boundedMoveShape(shape, point + offset)
-
+    def format_shape(s):
+        if self.edit:
+            return dict(line_color=s.line_color.getRgb(),
+                    fill_color=s.fill_color.getRgb(),
+                    points=[(p.x(), p.y()) for p in s.points])
+        else:
+            bgds = []
+            for q in s.bgds:
+                for p in q:
+                    bgds.append([p.x(), p.y()])
+            fgds = []
+            for q in s.fgds:
+                for p in q:
+                    fgds.append([p.x(), p.y()])
+            return dict(line_color=s.line_color.getRgb(),fill_color=s.fill_color.getRgb(),bgds=bgds,fgds=fgds)
     def paintEvent(self, event):
         if not self.pixmap:
             return super(Canvas, self).paintEvent(event)
@@ -471,12 +487,21 @@ class Canvas(QWidget):
         if self.points and not self.edit:
             self.current.points[-1] = self.points
             if self.bgd:
-                self.current.bgds = self.current.points
+                if len(self.current.bgds)-len(self.current.points)>0:
+                    self.current.bgds.extend(self.current.points)
+                    self.current.points = self.current.bgds
+                else:
+                    self.current.bgds = self.current.points
             else:
-                self.current.fgds = self.current.points
+                if len(self.current.fgds)-len(self.current.points)>0:
+                    self.current.fgds.extend(self.current.points)
+                    self.current.points = self.current.fgds
+                else:
+                    self.current.fgds = self.current.points
         if self.current:
             self.current.edit = self.edit
             self.current.paint(p)
+            
             if self.edit:
                 self.line.paint(p)
         if self.edit:
