@@ -14,6 +14,7 @@ from zoomWidget import ZoomWidget
 from grab_cut import Grab_cut
 from SLICcv import SLIC
 import cv2
+import time
 
 __appname__ = 'ImageMatting'
 defaultFilename = '.'
@@ -166,12 +167,10 @@ class MainWindow(QMainWindow, WindowMixin):
         save = action('&Save', self.saveFile, 'Crl+S', 'Save output image')
         create = action('&Edit', self.createShape, 'w', 'Start to edit')
         matting = action('&GrabCut Matting', self.grabcutMatting, 'e', 'GrabcutMatting')
-        slic = action('&SLIC Matting', self.slicMatting, 's', 'SlicMatting')
-        slic_start = action('&Start SLIC Matting', self.startSlicMatting, 'm', 'startsSlicMatting')
+        slic = action('&SLIC Preprocessing', self.slicMatting, 's', 'SlicPreprocessing')
         slic_start = action('&Start SLIC Matting', self.startSlicMatting, 'm', 'startsSlicMatting')
         withdraw = action('&withdraw', self.withdraw, 'm', 'withdraw')
         repaint = action('&repaint', self.repaint, 'm', 'repaint')
-
 
         self.scalers = {
             self.FIT_WINDOW: self.scaleFitWindow,
@@ -441,6 +440,7 @@ class MainWindow(QMainWindow, WindowMixin):
                         fill_color=s.fill_color.getRgb(),
                         bgds=bgds,fgds=fgds)
 
+        start = time.clock()
         shape = format_shape(self.canvas.shapes[-1])
         if self.edit:
             self.image_out_np = self.mattingFile.image_matting(self.filePath,
@@ -448,6 +448,9 @@ class MainWindow(QMainWindow, WindowMixin):
         else:
             self.image_out_np = self.mattingFile.image_matting(self.filePath,
                                                            shape, iteration=10, flag=False)
+        elapsed = (time.clock() - start)
+        print("Time used:",elapsed)
+
         self.canvas.grab_cut = self.mattingFile
         self.canvas.slic = None
         self.showResultImg(self.image_out_np)
@@ -462,10 +465,13 @@ class MainWindow(QMainWindow, WindowMixin):
         nr_superpixels = int(self.nr_superpixelsEdit.text())
         nc = int(self.ncEdit.text())
         step = int((img.shape[0]*img.shape[1]/nr_superpixels)**0.5)#assume the area is regular
+        start = time.clock()
         self.slic = SLIC(img, step, nc, self.filePath)
         self.slic.generateSuperPixels()
         self.slic.createConnectivity()
         self.slic.displayContours([255,255,255])
+        elapsed = (time.clock() - start)
+        print("Time used:",elapsed)
         self.image_out_np = self.slic.img
         image_np = self.slic.img
         image = QImage(image_np, image_np.shape[1],
@@ -499,8 +505,11 @@ class MainWindow(QMainWindow, WindowMixin):
                         fill_color=s.fill_color.getRgb(),
                         bgds=bgds,fgds=fgds)
 
+        start = time.clock()
         shape = format_shape(self.canvas.shapes[-1])
         self.slic.imageCutting(shape)
+        elapsed = (time.clock() - start)
+        print("Time used:",elapsed)
 
         self.image_out_np = self.slic.img
         image_np = self.slic.img

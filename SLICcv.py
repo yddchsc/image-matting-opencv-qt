@@ -342,10 +342,10 @@ class SLIC:
 
         while len(self.graph.middleArea)>0:
             n = len(self.graph.middleArea)
-            self.graph.breadth_first_search(root=self.graph.bgdArea[-1], hists=hists)
+            self.graph.breadth_first_search(root=self.graph.fgdArea[-1], hists=hists)
             #print(self.graph.middleArea)
             self.graph.visited = {}
-            self.graph.breadth_first_search(root=self.graph.fgdArea[-1], hists=hists)
+            self.graph.breadth_first_search(root=self.graph.bgdArea[-1], hists=hists)
             self.graph.visited = {}
             #print(self.graph.middleArea)
             if len(self.graph.middleArea) == n:
@@ -353,8 +353,9 @@ class SLIC:
                     maxs = -100000
                     maxindex = self.graph.node_neighbors[middle][0]
                     for neighbour in self.graph.node_neighbors[middle]:
-                        if not neighbour in self.graph.middleArea and cv2.compareHist(hists[middle],hists[neighbour],0)>maxs:
-                            maxs = cv2.compareHist(hists[middle],hists[neighbour],0)
+                        hist = cv2.compareHist(hists[middle],hists[neighbour],0)
+                        if not neighbour in self.graph.middleArea and hist>maxs:
+                            maxs = hist
                             maxindex = neighbour
                     if maxindex in self.graph.fgdArea:    
                         self.middleArea.remove(middle)
@@ -367,11 +368,11 @@ class SLIC:
         self.fgdArea = self.graph.fgdArea
         self.middleArea = self.graph.middleArea
 
-        a_plane = 255 * np.ones(self.img.shape[:2]).astype('uint8')
+        a_plane = 0 * np.ones(self.img.shape[:2]).astype('uint8')
         for k in self.graph.nodes():
             idx = (self.clusters == k)
-            if k in self.bgdArea:
-                a_plane[idx] = 0
+            if k in self.fgdArea:
+                a_plane[idx] = 255
         self.img = cv2.merge((r_plane,
                               g_plane,
                               b_plane,

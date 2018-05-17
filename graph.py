@@ -47,36 +47,38 @@ class Graph(object):
 
     def breadth_first_search(self, root=None, hists=[]):
         queue = []
-        order = []
+        #order = []
         def bfs():
             while len(queue) > 0:
                 node = queue.pop(0)
                 self.visited[node] = True
                 for n in self.node_neighbors[node]:
-                    if (not n in self.visited) and (not n in queue):
-                        for neighbour in self.node_neighbors[n]:
+                    #if (not n in self.visited) and (not n in queue):
+                        #for neighbour in self.node_neighbors[n]:
                             #print(cv2.compareHist(hists[n],hists[neighbour],0))
                             #print('neighbour' + str(neighbour))
-                            if cv2.compareHist(hists[n],hists[neighbour],0)>0.5 and (neighbour in self.middleArea):
-                                if n in self.fgdArea:    
-                                    self.middleArea.remove(neighbour)
-                                    self.fgdArea.append(neighbour)
-                                elif n in self.bgdArea:
-                                    self.middleArea.remove(neighbour)
-                                    self.bgdArea.append(neighbour)
+                    if (not node in self.middleArea) and cv2.compareHist(hists[n],hists[node],0)>0.5 and (n in self.middleArea):
+                        if node in self.fgdArea:    
+                            self.middleArea.remove(n)
+                            self.fgdArea.append(n)
+                        elif node in self.bgdArea:
+                            self.middleArea.remove(n)
+                            self.bgdArea.append(n)
+
+                    if (not n in self.visited) and (not n in queue):
                         queue.append(n)
-                        order.append(n)
+                    #order.append(n)
         if root:
             queue.append(root)
-            order.append(root)
+            #order.append(root)
             bfs()
         for node in self.nodes():
             if not node in self.visited:
                 queue.append(node)
-                order.append(node)
+                #order.append(node)
                 bfs()
         #print order
-        return order
+        #return order
 
 
 # if __name__ == '__main__':
