@@ -449,7 +449,7 @@ class MainWindow(QMainWindow, WindowMixin):
             self.image_out_np = self.mattingFile.image_matting(self.filePath,
                                                            shape, iteration=10, flag=False)
         elapsed = (time.clock() - start)
-        print("Time used:",elapsed)
+        print("Grab Cut Time used:",elapsed)
 
         self.canvas.grab_cut = self.mattingFile
         self.canvas.slic = None
@@ -471,11 +471,13 @@ class MainWindow(QMainWindow, WindowMixin):
         self.slic.createConnectivity()
         self.slic.displayContours([255,255,255])
         elapsed = (time.clock() - start)
-        print("Time used:",elapsed)
+        print("Preprocessing Time used:",elapsed)
+
         self.image_out_np = self.slic.img
         image_np = self.slic.img
         image = QImage(image_np, image_np.shape[1],
                        image_np.shape[0], QImage.Format_RGB888).rgbSwapped()
+        
         #matImg = QPixmap(image).scaled(self.pic.width(),self.pic.height())
         #self.pic.setPixmap(matImg)
         matImg = QPixmap(image)
@@ -509,13 +511,15 @@ class MainWindow(QMainWindow, WindowMixin):
         shape = format_shape(self.canvas.shapes[-1])
         self.slic.imageCutting(shape)
         elapsed = (time.clock() - start)
-        print("Time used:",elapsed)
+        print("Matting Time used:",elapsed)
 
         self.image_out_np = self.slic.img
         image_np = self.slic.img
-        image = QImage(image_np, image_np.shape[1],image_np.shape[0], QImage.Format_ARGB32).rgbSwapped()
-        matImg = QPixmap(image).scaled(self.pic.width(),self.pic.height())
-        self.pic.setPixmap(matImg)
+        self.showResultImg(self.image_out_np)
+        
+        #image = QImage(image_np, image_np.shape[1],image_np.shape[0], QImage.Format_ARGB32)  
+        #matImg = QPixmap(image).scaled(self.pic.width(),self.pic.height())
+        #self.pic.setPixmap(matImg)
         # matImg = QPixmap(image)
         # self.canvas.loadPixmap(matImg)
         #self.showResultImg(self.image_out_np)

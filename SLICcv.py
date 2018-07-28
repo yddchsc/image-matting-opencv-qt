@@ -373,9 +373,9 @@ class SLIC:
             idx = (self.clusters == k)
             if k in self.fgdArea:
                 a_plane[idx] = 255
-        self.img = cv2.merge((r_plane,
+        self.img = cv2.merge((b_plane,
                               g_plane,
-                              b_plane,
+                              r_plane,
                               a_plane))
 
 

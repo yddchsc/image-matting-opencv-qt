@@ -20,8 +20,8 @@ class Grab_cut(object):
             src_img = cv2.imread(image_file)
 
             mask = np.zeros(src_img.shape[:2], np.uint8)
-            print(mask)
-            print(src_img)
+            # print(mask)
+            # print(src_img)
             bgdModel = np.zeros((1, 65), np.float64)
             fgdModel = np.zeros((1, 65), np.float64)
             rect = (xmin, ymin, self.width, self.height)

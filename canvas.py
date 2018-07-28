@@ -487,13 +487,13 @@ class Canvas(QWidget):
         if self.points and not self.edit:
             self.current.points[-1] = self.points
             if self.bgd:
-                if len(self.current.bgds)-len(self.current.points)>0:
+                if len(self.current.bgds)-len(self.current.points)>0 or self.current.points == [self.points]:
                     self.current.bgds.extend(self.current.points)
                     self.current.points = self.current.bgds
                 else:
                     self.current.bgds = self.current.points
             else:
-                if len(self.current.fgds)-len(self.current.points)>0:
+                if len(self.current.fgds)-len(self.current.points)>0 or self.current.points == [self.points]:
                     self.current.fgds.extend(self.current.points)
                     self.current.points = self.current.fgds
                 else:
